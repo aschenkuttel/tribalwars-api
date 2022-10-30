@@ -82,7 +82,7 @@ async def home():
 # WORLD
 @app.get('/world',
          tags=["World"],
-         response_model=List,
+         response_model=Dict[str, List],
          summary="current supported worlds")
 @limiter.limit('30/minute')
 async def get_worlds(_: Request):
