@@ -1,5 +1,4 @@
 .idea/
 venv
-update.py
 debug.py
 utils/config.py
