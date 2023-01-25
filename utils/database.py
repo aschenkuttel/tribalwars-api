@@ -5,9 +5,14 @@ import asyncpg
 class Database:
     def __init__(self):
         self._pool = None
+        self._conn = None
 
-    async def connect(self):
+    async def connect(self, callback):
         self._pool = await asyncpg.create_pool(**utils.conn_kwargs)
+
+        # initiate logging connection for discord callback
+        self._conn = await self._pool.acquire()
+        await self._conn.add_listener('log', callback)
 
     async def disconnect(self):
         await self._pool.close()

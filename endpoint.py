@@ -63,10 +63,23 @@ db = Database()
 @app.on_event('startup')
 async def on_start():
     initiate_errors(app)
-    await db.connect()
+    await db.connect(callback)
+    await update_worlds()
+
+
+async def callback(*args):
+    payload = args[-1]
+
+    if payload == "200":
+        await update_worlds()
+    else:
+        print(args)
+
+
+async def update_worlds():
     response = await db.fetch('SELECT world FROM world', with_world=True)
-    utils.valid_worlds.extend([e['world'] for e in response])
-    utils.valid_languages.extend([w[:2] for w in utils.valid_worlds])
+    utils.valid_worlds = [e['world'] for e in response]
+    utils.valid_languages = [w[:2] for w in utils.valid_worlds]
 
 
 @app.on_event('shutdown')
