@@ -38,20 +38,6 @@ stat_shortcuts = {
     'bash': "all_bash"
 }
 
-valid_languages = []
-valid_worlds = []
-
-
-def create_query(table_types, query, world_id, *extra_args):
-    if world_id not in valid_worlds:
-        raise error.InvalidWorld()
-    else:
-        if isinstance(table_types, str):
-            table_types = [table_types]
-
-        table_names = [e + "_" + world_id for e in table_types]
-        return str(query.format(*table_names, *extra_args))
-
 
 def verify_arguments(**kwargs):
     changed_arguments = []

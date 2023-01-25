@@ -1,4 +1,4 @@
-from utils import Database, initiate_errors, parse_result, create_query
+from utils import Database, initiate_errors, parse_result
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, UJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,23 +63,7 @@ db = Database()
 @app.on_event('startup')
 async def on_start():
     initiate_errors(app)
-    await db.connect(callback)
-    await update_worlds()
-
-
-async def callback(*args):
-    payload = args[-1]
-
-    if payload == "200":
-        await update_worlds()
-    else:
-        print(args)
-
-
-async def update_worlds():
-    response = await db.fetch('SELECT world FROM world', with_world=True)
-    utils.valid_worlds = [e['world'] for e in response]
-    utils.valid_languages = [w[:2] for w in utils.valid_worlds]
+    await db.connect()
 
 
 @app.on_event('shutdown')
@@ -120,7 +104,7 @@ async def get_worlds(_: Request):
          summary="current supported worlds by language")
 @limiter.limit('30/minute')
 async def get_worlds_by_language(_: Request, language):
-    if language not in utils.valid_languages:
+    if language not in db.languages:
         raise utils.error.InvalidArgument('language', language)
 
     response = await db.fetch('SELECT * FROM world WHERE world LIKE $1', language + "%", with_world=True)
@@ -131,7 +115,7 @@ async def get_worlds_by_language(_: Request, language):
          tags=["World"],
          summary="settings of given world")
 async def get_world_settings(_: Request, world):
-    if world not in utils.valid_worlds:
+    if world not in db.worlds:
         raise utils.error.InvalidArgument('world', world)
 
     response = await db.fetchone('SELECT * FROM world WHERE world = $1', world, with_world=True)
@@ -162,7 +146,7 @@ async def get_world_settings(_: Request, world):
 @limiter.limit('1/minute')
 async def get_villages_by_world(_: Request, world):
     """# returns id -> village dictionary"""
-    query = create_query('village', 'SELECT * FROM {}', world)
+    query = db.create_query('village', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
     return parse_result(response, 'name', iterable=True, u_json=True)
 
@@ -174,7 +158,7 @@ async def get_villages_by_world(_: Request, world):
 @limiter.limit('20/minute')
 async def get_villages_by_tribe(_: Request, world, tribe_id: int):
     base_query = 'SELECT * FROM {} WHERE player_id IN (SELECT id FROM {} WHERE tribe_id = $1)'
-    query = create_query(('village', 'player'), base_query, world)
+    query = db.create_query(('village', 'player'), base_query, world)
     response = await db.fetch(query, tribe_id)
     tmp_result = parse_result(response, 'name', iterable=True)
 
@@ -195,7 +179,7 @@ async def get_villages_by_tribe(_: Request, world, tribe_id: int):
          summary="villages of given world and player id")
 @limiter.limit('30/minute')
 async def get_villages_by_player(_: Request, world, player_id: int):
-    query = create_query('village', 'SELECT * FROM {} WHERE player_id = $1', world)
+    query = db.create_query('village', 'SELECT * FROM {} WHERE player_id = $1', world)
     response = await db.fetch(query, player_id)
     return parse_result(response, 'name', iterable=True)
 
@@ -206,7 +190,7 @@ async def get_villages_by_player(_: Request, world, player_id: int):
          summary="village of given world and village id")
 @limiter.limit('30/minute')
 async def get_village_by_id(_: Request, world, village_id: int):
-    query = create_query('village', 'SELECT * FROM {} WHERE id = $1', world)
+    query = db.create_query('village', 'SELECT * FROM {} WHERE id = $1', world)
     response = await db.fetchone(query, village_id)
     return parse_result(response, 'name')
 
@@ -218,7 +202,7 @@ async def get_village_by_id(_: Request, world, village_id: int):
          summary="players of given world")
 @limiter.limit('1/minute')
 async def get_players_by_world(_: Request, world):
-    query = create_query('player', 'SELECT * FROM {}', world)
+    query = db.create_query('player', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
     return parse_result(response, 'name', iterable=True, u_json=True)
 
@@ -229,7 +213,7 @@ async def get_players_by_world(_: Request, world):
          summary="players of given world and given tribe id")
 @limiter.limit('30/minute')
 async def get_players_by_tribe(_: Request, world, tribe_id: int):
-    query = create_query('player', 'SELECT * FROM {} WHERE tribe_id = $1', world)
+    query = db.create_query('player', 'SELECT * FROM {} WHERE tribe_id = $1', world)
     response = await db.fetch(query, tribe_id, key='id')
     return parse_result(response, 'name', iterable=True)
 
@@ -240,7 +224,7 @@ async def get_players_by_tribe(_: Request, world, tribe_id: int):
          summary="player of given world and player name")
 @limiter.limit('30/minute')
 async def get_player_by_name(_: Request, world, player_name):
-    query = create_query('player', 'SELECT * FROM {} WHERE LOWER(name) = $1', world)
+    query = db.create_query('player', 'SELECT * FROM {} WHERE LOWER(name) = $1', world)
     response = await db.fetch(query, player_name.lower())
     return parse_result(response, 'name')
 
@@ -251,7 +235,7 @@ async def get_player_by_name(_: Request, world, player_name):
          summary="player of given world and player id")
 @limiter.limit('30/minute')
 async def get_player_by_id(_: Request, world, player_id: int):
-    query = create_query('player', 'SELECT * FROM {} WHERE id = $1', world)
+    query = db.create_query('player', 'SELECT * FROM {} WHERE id = $1', world)
     response = await db.fetchone(query, player_id)
     return parse_result(response, 'name')
 
@@ -263,7 +247,7 @@ async def get_player_by_id(_: Request, world, player_id: int):
          summary="tribes of given world")
 @limiter.limit('1/minute')
 async def get_tribes_by_world(_: Request, world):
-    query = create_query('tribe', 'SELECT * FROM {}', world)
+    query = db.create_query('tribe', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
     return parse_result(response, 'name', 'tag', iterable=True, u_json=True)
 
@@ -274,7 +258,7 @@ async def get_tribes_by_world(_: Request, world):
          summary="tribe of given world and tribe id")
 @limiter.limit('30/minute')
 async def get_tribe_by_id(_: Request, world, tribe_id: int):
-    query = create_query('tribe', 'SELECT * FROM {} WHERE id = $1', world)
+    query = db.create_query('tribe', 'SELECT * FROM {} WHERE id = $1', world)
     response = await db.fetchone(query, tribe_id)
     return parse_result(response, 'name', 'tag')
 
@@ -285,7 +269,7 @@ async def get_tribe_by_id(_: Request, world, tribe_id: int):
          summary="tribe of given world and tribe name")
 @limiter.limit('30/minute')
 async def get_tribe_by_name(_: Request, world, tribe_name):
-    query = create_query('tribe', 'SELECT * FROM {} WHERE LOWER(name) = $1', world)
+    query = db.create_query('tribe', 'SELECT * FROM {} WHERE LOWER(name) = $1', world)
     response = await db.fetchone(query, tribe_name.lower())
     return parse_result(response, 'name', 'tag')
 
@@ -296,7 +280,7 @@ async def get_tribe_by_name(_: Request, world, tribe_name):
          summary="tribe of given world and tribe tag")
 @limiter.limit('30/minute')
 async def get_tribe_by_tag(_: Request, world, tribe_tag):
-    query = create_query('tribe', 'SELECT * FROM {} WHERE LOWER(tag) = $1', world)
+    query = db.create_query('tribe', 'SELECT * FROM {} WHERE LOWER(tag) = $1', world)
     response = await db.fetchone(query, tribe_tag.lower())
     return parse_result(response, 'name', 'tag')
 
@@ -310,7 +294,7 @@ async def get_tribe_by_tag(_: Request, world, tribe_tag):
 async def get_top_tribe_by_property(_: Request, world, attribute, amount: int = 5, order: str = "DESC"):
     attribute = utils.verify_arguments(tribe_attribute=attribute, amount=amount, order=order)
     base_query = 'SELECT * FROM {} ORDER BY {} {} LIMIT $1'
-    query = create_query('tribe', base_query, world, attribute, order)
+    query = db.create_query('tribe', base_query, world, attribute, order)
     response = await db.fetch(query, amount)
     return parse_result(response, 'name', 'tag', iterable=True)
 
@@ -323,7 +307,7 @@ async def get_top_tribe_by_property(_: Request, world, attribute, amount: int = 
 async def get_top_player_by_property(_: Request, world, attribute, amount: int = 5, order: str = "DESC"):
     attribute = utils.verify_arguments(player_attribute=attribute, amount=amount, order=order)
     base_query = 'SELECT * FROM {} ORDER BY {} {} LIMIT $1'
-    query = create_query('player', base_query, world, attribute, order)
+    query = db.create_query('player', base_query, world, attribute, order)
     response = await db.fetch(query, amount)
     return parse_result(response, 'name', iterable=True)
 
@@ -336,7 +320,7 @@ async def get_top_player_by_property(_: Request, world, attribute, amount: int =
 @limiter.limit('30/minute')
 async def get_random_elements_by_world(_: Request, ds_type, world, amount: int = 1):
     utils.verify_arguments(ds_type=ds_type, amount=amount)
-    query = create_query(ds_type, 'SELECT * FROM {} ORDER BY random() LIMIT $1', world)
+    query = db.create_query(ds_type, 'SELECT * FROM {} ORDER BY random() LIMIT $1', world)
 
     response = await db.fetch(query, amount)
     data = response[0] if amount == 1 else response
