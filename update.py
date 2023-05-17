@@ -164,6 +164,34 @@ class Cardinal:
             traceback.print_exc()
             self.send_code("404")
 
+    def manual_run(self, archive=False, send_code=False):
+        start = datetime.datetime.now()
+
+        try:
+            self.worlds = self.update_worlds(start)
+        except Exception as error:
+            print(f"World Update Error: {error}")
+
+            # if no initial world load worked
+            if not self.worlds:
+                return
+
+        try:
+            self.update()
+            if send_code is True:
+                self.send_code("200")
+        except Exception as e:
+            print(f"EXCEPTION OCCURED {e}")
+            traceback.print_exc()
+            return
+
+        if archive:
+            self.archive()
+
+        end = datetime.datetime.now()
+        current = datetime.datetime.strftime(end, "%H:%M")
+        print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
+
     def engine(self, now=False):
         if now is False:
             seconds = self.get_seconds_till_hour()
@@ -335,7 +363,7 @@ class Cardinal:
                 num = int(archive_table[len(table) + 1:])
 
                 if num + 1 > self.max_archived_days:
-                    query = f'DROP TABLE {archive_table}'
+                    query = f'DROP TABLE {archive_table};'
                     cur.execute(query)
                     continue
 
@@ -345,7 +373,7 @@ class Cardinal:
                 query = base.format(archive_table, new_name)
                 cur.execute(query)
 
-            base = 'CREATE TABLE {} AS TABLE {};'
+            base = 'CREATE TABLE {} TABLESPACE archive AS TABLE {};'
             query = base.format(f"{table}_1", table)
             cur.execute(query)
             self.conn.commit()
