@@ -143,29 +143,47 @@ class Cardinal:
         for _ in range(2):
             yield psycopg2.connect(" ".join(conn_info))
 
-    def run(self, restart=False):
-        if restart is True:
-            self.restart_counter += 1
-
-            # after 5 failed restarts we close the program
-            if self.restart_counter == 5:
-                self.send_code("404")
-                exit()
-            else:
-                self.send_code("400")
-
-        else:
-            self.setup_tables()
+    def run(self):
+        self.setup_tables()
 
         try:
-            self.engine(now=restart)
+            self.engine()
         except Exception as e:
             print(f"EXCEPTION OCCURRED {e}")
             traceback.print_exc()
             self.send_code("404")
 
-    def manual_run(self, archive=False, send_code=False):
+    def engine(self):
+        restart = 0
+
+        while True:
+            if restart == 0:
+                seconds = self.get_seconds_till_hour()
+                time.sleep(seconds)
+
+            response = self.update()
+
+            if response is False:
+                self.send_code("400")
+
+                if restart == 5:
+                    print("RESTARTED 5 TIMES AND FAILED")
+                    self.send_code("404")
+                    exit()
+                else:
+                    restart += 1
+                    sec = 10 + 3 ** (restart - 1)
+                    time.sleep(sec)
+            else:
+                # reset restarts after every successful run
+                restart = 0
+
+    def update(self):
         start = datetime.datetime.now()
+
+        # archive every day at 12 pm
+        if start.hour == 0:
+            self.archive_data = True
 
         try:
             self.worlds = self.update_worlds(start)
@@ -174,70 +192,92 @@ class Cardinal:
 
             # if no initial world load worked
             if not self.worlds:
-                return
+                return False
 
         try:
-            self.update()
-            if send_code is True:
-                self.send_code("200")
+            self.update_data()
+            self.send_code("200")
         except Exception as e:
             print(f"EXCEPTION OCCURED {e}")
             traceback.print_exc()
-            return
+            return False
 
-        if archive:
+        if self.archive_data:
             self.archive()
+            self.archive_data = False
 
         end = datetime.datetime.now()
         current = datetime.datetime.strftime(end, "%H:%M")
         print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
+        return True
 
-    def engine(self, now=False):
-        if now is False:
-            seconds = self.get_seconds_till_hour()
-            time.sleep(seconds)
+    # def run_old(self, restart=False):
+    #     if restart is True:
+    #         self.restart_counter += 1
+    #
+    #         # after 5 failed restarts we close the program
+    #         if self.restart_counter == 5:
+    #             self.send_code("404")
+    #             exit()
+    #         else:
+    #             self.send_code("400")
+    #
+    #     else:
+    #         self.setup_tables()
+    #
+    #     try:
+    #         self.engine(now=restart)
+    #     except Exception as e:
+    #         print(f"EXCEPTION OCCURRED {e}")
+    #         traceback.print_exc()
+    #         self.send_code("404")
+    #
+    # def engine_old(self, now=False):
+    #     if now is False:
+    #         seconds = self.get_seconds_till_hour()
+    #         time.sleep(seconds)
+    #
+    #     while True:
+    #         start = datetime.datetime.now()
+    #
+    #         # archive every day at 12 pm
+    #         if start.hour == 0:
+    #             self.archive_data = True
+    #
+    #         try:
+    #             self.worlds = self.update_worlds(start)
+    #         except Exception as error:
+    #             print(f"World Update Error: {error}")
+    #
+    #             # if no initial world load worked
+    #             if not self.worlds:
+    #                 break
+    #
+    #         try:
+    #             self.update()
+    #             self.send_code("200")
+    #         except Exception as e:
+    #             print(f"EXCEPTION OCCURED {e}")
+    #             traceback.print_exc()
+    #             break
+    #
+    #         if self.archive_data:
+    #             self.archive()
+    #             self.archive_data = False
+    #
+    #         end = datetime.datetime.now()
+    #         current = datetime.datetime.strftime(end, "%H:%M")
+    #         print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
+    #         seconds = self.get_seconds_till_hour()
+    #         time.sleep(seconds)
+    #
+    #         # reset after every successful run
+    #         self.restart_counter = 0
+    #
+    #     time.sleep(20)
+    #     self.run(restart=True)
 
-        while True:
-            start = datetime.datetime.now()
-
-            # archive every day at 12 pm
-            if start.hour == 0:
-                self.archive_data = True
-
-            try:
-                self.worlds = self.update_worlds(start)
-            except Exception as error:
-                print(f"World Update Error: {error}")
-
-                # if no initial world load worked
-                if not self.worlds:
-                    break
-
-            try:
-                self.update()
-                self.send_code("200")
-            except Exception as e:
-                print(f"EXCEPTION OCCURED {e}")
-                traceback.print_exc()
-                break
-
-            if self.archive_data:
-                self.archive()
-                self.archive_data = False
-
-            end = datetime.datetime.now()
-            current = datetime.datetime.strftime(end, "%H:%M")
-            print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
-            seconds = self.get_seconds_till_hour()
-            time.sleep(seconds)
-
-            # reset after every successful run
-            self.restart_counter = 0
-
-        time.sleep(20)
-        self.run(restart=True)
-
-    def update(self):
+    def update_data(self):
         self.cursor = self.conn.cursor()
 
         for table in self.types[:-1]:
@@ -501,6 +541,34 @@ class Cardinal:
         start_time = now.replace(microsecond=0)
         goal = (goal_time - start_time).seconds
         return goal
+
+    def manual_run(self, archive=False, send_code=False):
+        start = datetime.datetime.now()
+
+        try:
+            self.worlds = self.update_worlds(start)
+        except Exception as error:
+            print(f"World Update Error: {error}")
+
+            # if no initial world load worked
+            if not self.worlds:
+                return
+
+        try:
+            self.update_data()
+            if send_code is True:
+                self.send_code("200")
+        except Exception as e:
+            print(f"EXCEPTION OCCURED {e}")
+            traceback.print_exc()
+            return
+
+        if archive:
+            self.archive()
+
+        end = datetime.datetime.now()
+        current = datetime.datetime.strftime(end, "%H:%M")
+        print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
 
 
 cardinal = Cardinal()
