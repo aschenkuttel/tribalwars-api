@@ -14,9 +14,6 @@ import re
 class Cardinal:
     def __init__(self):
         self.worlds = []
-        self.start = True
-        self.restart_counter = 0
-        self.last_run = None
         self.max_archived_days = 30
         self.archive_data = False
         self.session = requests.Session()
@@ -153,6 +150,18 @@ class Cardinal:
             traceback.print_exc()
             self.send_code("404")
 
+        print("Attempting to reconnect")
+
+        try:
+            self.session = requests.Session()
+            self.conn, self.res = self.connect()
+            self.run()
+        except Exception as e:
+            print(f"RECONNECT FAILED {e}")
+            traceback.print_exc()
+            self.send_code("404")
+
+
     def engine(self):
         restart = 0
 
@@ -210,72 +219,6 @@ class Cardinal:
         current = datetime.datetime.strftime(end, "%H:%M")
         print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
         return True
-
-    # def run_old(self, restart=False):
-    #     if restart is True:
-    #         self.restart_counter += 1
-    #
-    #         # after 5 failed restarts we close the program
-    #         if self.restart_counter == 5:
-    #             self.send_code("404")
-    #             exit()
-    #         else:
-    #             self.send_code("400")
-    #
-    #     else:
-    #         self.setup_tables()
-    #
-    #     try:
-    #         self.engine(now=restart)
-    #     except Exception as e:
-    #         print(f"EXCEPTION OCCURRED {e}")
-    #         traceback.print_exc()
-    #         self.send_code("404")
-    #
-    # def engine_old(self, now=False):
-    #     if now is False:
-    #         seconds = self.get_seconds_till_hour()
-    #         time.sleep(seconds)
-    #
-    #     while True:
-    #         start = datetime.datetime.now()
-    #
-    #         # archive every day at 12 pm
-    #         if start.hour == 0:
-    #             self.archive_data = True
-    #
-    #         try:
-    #             self.worlds = self.update_worlds(start)
-    #         except Exception as error:
-    #             print(f"World Update Error: {error}")
-    #
-    #             # if no initial world load worked
-    #             if not self.worlds:
-    #                 break
-    #
-    #         try:
-    #             self.update()
-    #             self.send_code("200")
-    #         except Exception as e:
-    #             print(f"EXCEPTION OCCURED {e}")
-    #             traceback.print_exc()
-    #             break
-    #
-    #         if self.archive_data:
-    #             self.archive()
-    #             self.archive_data = False
-    #
-    #         end = datetime.datetime.now()
-    #         current = datetime.datetime.strftime(end, "%H:%M")
-    #         print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
-    #         seconds = self.get_seconds_till_hour()
-    #         time.sleep(seconds)
-    #
-    #         # reset after every successful run
-    #         self.restart_counter = 0
-    #
-    #     time.sleep(20)
-    #     self.run(restart=True)
 
     def update_data(self):
         self.cursor = self.conn.cursor()
@@ -519,11 +462,15 @@ class Cardinal:
         self.conn.commit()
         return worlds
 
-    def send_code(self, error):
-        query = f"NOTIFY log, '{error}'"
-        cur = self.res.cursor()
-        cur.execute(query)
-        self.res.commit()
+    def send_code(self, code):
+        try:
+            query = f"NOTIFY log, '{code}'"
+            cur = self.res.cursor()
+            cur.execute(query)
+            self.res.commit()
+        except Exception as e:
+            print(f"EXCEPTION OCCURRED NOTIFYING {e}")
+            traceback.print_exc()
 
     def secure_get(self, url):
         for _ in range(3):
