@@ -11,11 +11,13 @@ import io
 import re
 
 
+# TODO: rewrite this mess properly when you got time
+
 class Cardinal:
     def __init__(self):
         self.worlds = []
         self.max_archived_days = 30
-        self.archive_data = False
+        self.do_daily = False
         self.session = requests.Session()
         self.cursor = None
         self.conn, self.res = self.connect()
@@ -161,7 +163,6 @@ class Cardinal:
             traceback.print_exc()
             self.send_code("404")
 
-
     def engine(self):
         restart = 0
 
@@ -172,7 +173,7 @@ class Cardinal:
 
             response = self.update()
 
-            if response is False:
+            if not response:
                 self.send_code("400")
 
                 if restart == 5:
@@ -192,7 +193,7 @@ class Cardinal:
 
         # archive every day at 12 pm
         if start.hour == 0:
-            self.archive_data = True
+            self.do_daily = True
 
         try:
             self.worlds = self.update_worlds(start)
@@ -207,13 +208,13 @@ class Cardinal:
             self.update_data()
             self.send_code("200")
         except Exception as e:
-            print(f"EXCEPTION OCCURED {e}")
+            print(f"EXCEPTION OCCURRED {e}")
             traceback.print_exc()
             return False
 
-        if self.archive_data:
+        if self.do_daily:
             self.archive()
-            self.archive_data = False
+            self.do_daily = False
 
         end = datetime.datetime.now()
         current = datetime.datetime.strftime(end, "%H:%M")
@@ -225,7 +226,7 @@ class Cardinal:
 
         for table in self.types[:-1]:
             cache = self.create_temp(table)
-            # ignoring last element (primary key definition)
+            # ignoring the last element (primary key definition)
             values = [col.split()[0] for col in cache[:-1]]
 
             for world in self.worlds:
@@ -257,7 +258,7 @@ class Cardinal:
         self.cursor.close()
 
     def data_packer(self, table, world):
-        # 2 less because of first iteration
+        # 2 less because of the first iteration
         pointer = 6 if table == "tribe" else 4
         urls = getattr(self, f"{table}_url")
         data_pack = {}
@@ -386,7 +387,7 @@ class Cardinal:
         self.conn.commit()
         cur.close()
 
-    # creates cache table with base table columns
+    # creates a cache table with base table columns
     def create_temp(self, table):
         base = 'DROP TABLE IF EXISTS "cache";' \
                'CREATE TABLE "cache" ({});'
@@ -412,7 +413,7 @@ class Cardinal:
                 continue
 
             elif content.text.startswith("<!DOCTYPE html>"):
-                return
+                return None
 
             current_worlds = {k: v for k, v in matches}
 
@@ -456,11 +457,20 @@ class Cardinal:
 
         dead_worlds = tuple(set(old_worlds) - set(worlds))
         if dead_worlds:
-            query = 'DELETE FROM world WHERE world IN %s;'
-            cur.execute(query, (dead_worlds,))
+            for dead_world in dead_worlds:
+                self.cleanup_dead_world(cur, dead_world)
+
+            # query = 'DELETE FROM world WHERE world IN %s;'
+            # cur.execute(query, (dead_worlds,))
 
         self.conn.commit()
         return worlds
+
+    def cleanup_dead_world(self, cursor, dead_world):
+        for table in self.types[:-1]:
+            query = f'''DROP TABLE IF EXISTS {table}_{dead_world};
+            DELETE FROM world WHERE world = \'{dead_world}\';'''
+            cursor.execute(query)
 
     def send_code(self, code):
         try:
@@ -479,6 +489,8 @@ class Cardinal:
             except ConnectionError:
                 self.session = requests.Session()
                 time.sleep(.15)
+
+        return None
 
     @staticmethod
     def get_seconds_till_hour():
@@ -503,8 +515,9 @@ class Cardinal:
 
         try:
             self.update_data()
-            if send_code is True:
+            if send_code:
                 self.send_code("200")
+
         except Exception as e:
             print(f"EXCEPTION OCCURED {e}")
             traceback.print_exc()
@@ -516,6 +529,37 @@ class Cardinal:
         end = datetime.datetime.now()
         current = datetime.datetime.strftime(end, "%H:%M")
         print(f"{current} | Updated {len(self.worlds)} worlds in {end - start}")
+
+    def manual_cleanup(self):
+        start = datetime.datetime.now()
+
+        try:
+            self.worlds = self.update_worlds(start)
+        except Exception as error:
+            print(f"World Update Error: {error}")
+
+        # if no initial world load worked or no worlds
+        if not self.worlds:
+            return
+
+        query = '''SELECT table_name FROM information_schema.tables
+        WHERE table_schema=\'public\'
+        AND table_type=\'BASE TABLE\'
+        AND table_name ~ \'[a-z]+_[a-z]{2}\\d{1,2}\''''
+
+        cur = self.conn.cursor()
+        cur.execute(query)
+        all_world_tables = [obj[0] for obj in cur.fetchall()]
+
+        for table in all_world_tables:
+            world = table.split("_")[-1]
+
+            if world not in self.worlds:
+                cur.execute(f'DROP TABLE {table};')
+                print("DROPPED TABLE", table)
+
+        self.conn.commit()
+        cur.close()
 
 
 cardinal = Cardinal()
