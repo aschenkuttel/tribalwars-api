@@ -76,11 +76,11 @@ def verify_arguments(**kwargs):
         return changed_arguments
 
 
-def parse_result(data, *keys, iterable=False, u_json=False):
+def parse_result(data, *keys, iterable=False):
     if data is None:
         return data
 
-    if iterable is False:
+    if not iterable:
         data = [data]
 
     if isinstance(data, list):
@@ -93,9 +93,7 @@ def parse_result(data, *keys, iterable=False, u_json=False):
             for key in keys:
                 element[key] = unquote_plus(element[key])
 
-    if iterable and u_json:
-        return ujson.dumps(data)
-    elif iterable:
+    if iterable:
         return data
     else:
         return data[0]

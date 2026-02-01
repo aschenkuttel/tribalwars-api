@@ -148,7 +148,7 @@ async def get_villages_by_world(_: Request, world):
     """# returns id -> village dictionary"""
     query = db.create_query('village', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
-    return parse_result(response, 'name', iterable=True, u_json=True)
+    return parse_result(response, 'name', iterable=True)
 
 
 @app.get('/village/{world}/by-tribe/{tribe_id}',
@@ -204,7 +204,7 @@ async def get_village_by_id(_: Request, world, village_id: int):
 async def get_players_by_world(_: Request, world):
     query = db.create_query('player', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
-    return parse_result(response, 'name', iterable=True, u_json=True)
+    return parse_result(response, 'name', iterable=True)
 
 
 @app.get('/player/{world}/by-tribe/{tribe_id}',
@@ -249,7 +249,7 @@ async def get_player_by_id(_: Request, world, player_id: int):
 async def get_tribes_by_world(_: Request, world):
     query = db.create_query('tribe', 'SELECT * FROM {}', world)
     response = await db.fetch(query, key='id')
-    return parse_result(response, 'name', 'tag', iterable=True, u_json=True)
+    return parse_result(response, 'name', 'tag', iterable=True)
 
 
 @app.get('/tribe/{world}/by-id/{tribe_id}',
