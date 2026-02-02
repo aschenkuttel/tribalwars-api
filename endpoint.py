@@ -7,6 +7,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler  # noqa
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from typing import List, Union, Dict
+from contextlib import asynccontextmanager
 import utils
 import uvicorn
 import json
@@ -60,16 +61,15 @@ app.add_middleware(
 db = Database()
 
 
-@app.on_event('startup')
-async def on_start():
-    initiate_errors(app)
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initiate_errors(_app)
     await db.connect()
 
+    # waits till the end of the lifespan
+    yield
 
-@app.on_event('shutdown')
-async def on_close():
     await db.disconnect()
-
 
 @app.get('/', include_in_schema=False)
 async def home():
@@ -334,7 +334,7 @@ async def get_random_elements_by_world(_: Request, ds_type, world, amount: int =
          summary=" tribe attributes usable by other endpoints")
 @limiter.limit('1/minute')
 async def get_all_tribe_attributes(_: Request):
-    return list(utils.Tribe.__fields__)
+    return list(utils.Tribe.model_fields.keys())
 
 
 @app.get('/attribute/player',
@@ -343,7 +343,7 @@ async def get_all_tribe_attributes(_: Request):
          summary="player attributes usable by other endpoints")
 @limiter.limit('1/minute')
 async def get_all_player_attributes(_: Request):
-    return list(utils.Player.__fields__)
+    return list(utils.Player.model_fields.keys())
 
 
 # RUN

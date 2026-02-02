@@ -10,7 +10,8 @@ class Database:
         self.languages = []
 
     async def connect(self):
-        self._pool = await asyncpg.create_pool(**utils.conn_kwargs)
+        self._pool = await asyncpg.create_pool(**utils.conn_kwargs) # type: ignore
+
         await self.update_worlds()
 
         # initiate logging connection for discord callback
@@ -29,7 +30,7 @@ class Database:
             response = await conn.fetch(query, *args)
             batch = [dict(row) for row in response]
 
-            if with_world is False:
+            if not with_world:
                 [row.pop('world') for row in batch]
 
             if key is not None:
@@ -44,10 +45,11 @@ class Database:
             if response is not None:
                 result = dict(response)
 
-                if with_world is False:
+                if not with_world:
                     result.pop('world')
 
                 return result
+            return None
 
     def create_query(self, table_types, query, world_id, *extra_args):
         if world_id not in self.worlds:
