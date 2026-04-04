@@ -14,12 +14,25 @@ import json
 
 limiter = Limiter(key_func=get_remote_address)
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initiate_errors(_app)
+    await db.connect()
+    print("Connected to database")
+
+    # waits till the end of the lifespan
+    yield
+
+    print("Disconnecting from database")
+    await db.disconnect()
+
 app = FastAPI(
     title="TW Connect API",
     description="Parsing the official tribal wars endpoints into an open and easy API.",
-    version="0.2",
+    version="0.21",
     swagger_ui_parameters={'defaultModelsExpandDepth': -1},
-    redoc_url=None
+    redoc_url=None,
+    lifespan=lifespan,
 )
 
 
@@ -59,17 +72,6 @@ app.add_middleware(
 )
 
 db = Database()
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    initiate_errors(_app)
-    await db.connect()
-
-    # waits till the end of the lifespan
-    yield
-
-    await db.disconnect()
 
 @app.get('/', include_in_schema=False)
 async def home():
@@ -348,4 +350,4 @@ async def get_all_player_attributes(_: Request):
 
 # RUN
 if __name__ == "__main__":
-    uvicorn.run("endpoint:app", host=utils.server_url, port=443, log_level="info", **utils.kwargs)
+    uvicorn.run("endpoint:app", host="127.0.0.1", port=8000, log_level="info")

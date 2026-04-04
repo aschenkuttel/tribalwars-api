@@ -19,6 +19,8 @@ class Database:
         await self._conn.add_listener('log', self.callback)
 
     async def disconnect(self):
+        self._conn.remove_listener('log', self.callback)
+        self._pool.release(self._conn)
         await self._pool.close()
 
     def verify_world(self, world):
@@ -70,7 +72,11 @@ class Database:
             print(args)
 
     async def update_worlds(self):
-        response = await self.fetch('SELECT world FROM world', with_world=True)
+        try:
+            response = await self.fetch('SELECT world FROM world', with_world=True)
 
-        self.worlds = [e['world'] for e in response]
-        self.languages = [w[:2] for w in self.worlds]
+            self.worlds = [e['world'] for e in response]
+            self.languages = [w[:2] for w in self.worlds]
+
+        except asyncpg.exceptions.InterfaceError:
+            pass
